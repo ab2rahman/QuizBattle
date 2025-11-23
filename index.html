@@ -1332,6 +1332,8 @@
             window.fb.onValue(gameRef, (snap) => {
                 const data = snap.val ? snap.val() : snap || {};
                 if (!data) return;
+                // expose latest game data for debug/logging
+                window.currentGameState = data;
 
                 setText("hostStatusBadge", data.phase.toUpperCase());
                 setText("hostGamePhaseLabel", data.phase);
@@ -1845,6 +1847,15 @@
             const container = document.getElementById("playerOptionsContainer");
             clearElement(container);
 
+            // stop any lingering feedback audio when a new question loads
+            try {
+                if (window._currentFeedbackAudio && typeof window._currentFeedbackAudio.pause === 'function') {
+                    try { window._currentFeedbackAudio.pause(); } catch (e) { }
+                    try { window._currentFeedbackAudio.currentTime = 0; } catch (e) { }
+                    window._currentFeedbackAudio = null;
+                }
+            } catch (e) { }
+
             // compute counts from gameData.players (if present)
             const counts = Array((q.options || []).length).fill(0);
             try {
@@ -1968,6 +1979,8 @@
         }
 
         function showPlayerReveal(gameData) {
+            // defensive: only proceed when gameData indicates reveal phase
+            if (gameData && gameData.phase && gameData.phase !== 'reveal') return;
             const idx = gameData.currentQuestionIndex;
             const q = gameData.questions[idx];
             const correctIndex = q.correctIndex;
@@ -2004,8 +2017,8 @@
                 const me = (currentPlayerId && playersObj[currentPlayerId]) ? playersObj[currentPlayerId] : null;
                 const myAnswer = me && typeof me.currentAnswer === 'number' ? me.currentAnswer : null;
                 const isSuccess = (myAnswer !== null && myAnswer === correctIndex);
-                // only play when we have a current player id
-                if (currentPlayerId) playRandomFeedback(!!isSuccess);
+                // only play when we have a current player id and phase is reveal
+                if (currentPlayerId && gameData.phase === 'reveal') playRandomFeedback(!!isSuccess, gameData.phase);
             } catch (e) { console.warn('play feedback determination failed', e); }
         }
 
@@ -2031,11 +2044,26 @@
             'assets/fail/fail9.mp3'
         ];
 
-        function playRandomFeedback(isSuccess) {
+        function playRandomFeedback(isSuccess, passedPhase) {
+            const knownPhase = passedPhase || (window.currentGameState && window.currentGameState.phase) || 'unknown';
+            console.debug('playRandomFeedback called', { isSuccess, knownPhase, passedPhase, currentPlayerId });
             try {
+                // strict guard: only play feedback when the phase passed in (or last known) is reveal
+                if (knownPhase !== 'reveal') {
+                    console.debug('playRandomFeedback suppressed because phase is not reveal', { knownPhase });
+                    return;
+                }
                 const pool = isSuccess ? successAudios : failAudios;
                 const pick = pool[Math.floor(Math.random() * pool.length)];
+                // stop previous feedback audio if any
+                try {
+                    if (window._currentFeedbackAudio && typeof window._currentFeedbackAudio.pause === 'function') {
+                        window._currentFeedbackAudio.pause();
+                        try { window._currentFeedbackAudio.currentTime = 0; } catch (e) { }
+                    }
+                } catch (e) { }
                 const audio = new Audio(pick);
+                window._currentFeedbackAudio = audio;
                 audio.volume = isSuccess ? 0.9 : 0.9;
                 audio.play().catch((e) => { console.warn('play feedback failed', e); });
             } catch (e) { console.warn('playRandomFeedback error', e); }
