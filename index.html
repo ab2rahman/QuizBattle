@@ -355,9 +355,55 @@
             font-weight: 500;
         }
 
+        /* option content: label on left and small count badge on right */
+        .option-btn {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .option-count {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.04);
+            padding: 6px 8px;
+            border-radius: 999px;
+            font-size: 13px;
+            color: #e6eef6;
+            min-width: 44px;
+            text-align: center;
+        }
+
+        .option-count.correct {
+            background: #14532d;
+            border-color: #22c55e;
+            color: #bbf7d0;
+        }
+
+        .option-count.wrong {
+            background: #7f1d1d;
+            border-color: #ef4444;
+            color: #ffd7d7;
+        }
+
+        /* Selected by player before reveal: show positive/affirming highlight (green-ish)
+           This visually differentiates chosen answer from others prior to reveal. */
         .option-btn.selected {
-            border-color: #facc15;
-            background: #1f2937;
+            border-color: #3b82f6; /* blue border */
+            background: linear-gradient(180deg, rgba(59,130,246,0.08), #1e3a8a); /* subtle blue background */
+            box-shadow: 0 6px 18px rgba(59,130,246,0.06), inset 0 0 0 3px rgba(59,130,246,0.03);
+        }
+
+        /* Also support attribute-based states so developer tools or delegated handlers
+           that set attributes (aria-pressed or data-selected) show the same highlight. */
+        .option-btn[aria-pressed="true"],
+        .option-btn[data-selected="1"] {
+            border-color: #3b82f6;
+            background: linear-gradient(180deg, rgba(59,130,246,0.08), #1e3a8a);
+            box-shadow: 0 6px 18px rgba(59,130,246,0.06), inset 0 0 0 3px rgba(59,130,246,0.03);
+            opacity: 1;
+            filter: none;
+            cursor: default;
         }
 
         /* keep selected visible even when button is disabled */
@@ -1522,12 +1568,40 @@
             const container = document.getElementById("hostOptionsContainer");
             clearElement(container);
 
-            q.options.forEach((opt, i) => {
-                const btn = document.createElement("div");
-                btn.className = "option-btn";
-                btn.textContent = String.fromCharCode(65 + i) + ". " + opt;
-                container.appendChild(btn);
+            // compute counts from gameData.players
+            const counts = Array((q.options || []).length).fill(0);
+            const playersObj = gameData.players || {};
+            Object.values(playersObj).forEach((p) => {
+                if (typeof p.currentAnswer === 'number' && p.currentAnswer >= 0 && p.currentAnswer < counts.length) {
+                    counts[p.currentAnswer] = (counts[p.currentAnswer] || 0) + 1;
+                }
             });
+
+            q.options.forEach((opt, i) => {
+                const wrap = document.createElement('div');
+                wrap.className = 'option-btn';
+                wrap.dataset.index = String(i);
+                // left label
+                const left = document.createElement('div'); left.style.flex = '1';
+                left.textContent = String.fromCharCode(65 + i) + '. ' + opt;
+                // right count badge
+                const cnt = document.createElement('div');
+                cnt.className = 'option-count';
+                cnt.textContent = String(counts[i] || 0);
+
+                wrap.appendChild(left);
+                wrap.appendChild(cnt);
+                container.appendChild(wrap);
+            });
+
+            // Play short 'pew' SFX when host view shows a question
+            try {
+                if (role === 'host') {
+                    const s = new Audio('assets/pew.mp3');
+                    s.volume = 0.9;
+                    s.play().catch((e) => { /* ignore autoplay blocks */ });
+                }
+            } catch (e) { }
         }
 
         async function nextQuestion() {
@@ -1603,10 +1677,27 @@
             playSound("reveal");
             resetHostTimer();
 
+            // compute counts and update host options UI to show counts and highlight correct
+            const counts = Array((data.questions[idx].options || []).length).fill(0);
+            Object.values(players || {}).forEach((p) => {
+                if (typeof p.currentAnswer === 'number' && p.currentAnswer >= 0 && p.currentAnswer < counts.length) {
+                    counts[p.currentAnswer] = (counts[p.currentAnswer] || 0) + 1;
+                }
+            });
+
             const container = document.getElementById("hostOptionsContainer");
             Array.from(container.children).forEach((el, i) => {
+                // update count badge if present
+                const cnt = el.querySelector ? el.querySelector('.option-count') : null;
+                if (cnt) cnt.textContent = String(counts[i] || 0);
+                // mark correct/wrong visually
                 if (i === correctIndex) {
                     el.classList.add("correct");
+                    el.classList.remove("wrong");
+                    const badge = cnt; if (badge) badge.classList.add('correct');
+                } else {
+                    if (counts[i] > 0) el.classList.add('wrong');
+                    const badge = cnt; if (badge) badge.classList.remove('correct');
                 }
             });
         }
@@ -1726,7 +1817,7 @@
             });
         }
 
-        function showPlayerQuestion(gameData) {
+    async function showPlayerQuestion(gameData) {
             document.getElementById("playerWaitingCard").classList.add("hidden");
             document.getElementById("playerSummaryCard").classList.add("hidden");
             document.getElementById("playerQuestionCard").classList.remove("hidden");
@@ -1754,11 +1845,55 @@
             const container = document.getElementById("playerOptionsContainer");
             clearElement(container);
 
+            // compute counts from gameData.players (if present)
+            const counts = Array((q.options || []).length).fill(0);
+            try {
+                const playersObj = gameData.players || {};
+                Object.values(playersObj).forEach((p) => {
+                    if (typeof p.currentAnswer === 'number' && p.currentAnswer >= 0 && p.currentAnswer < counts.length) {
+                        counts[p.currentAnswer] = (counts[p.currentAnswer] || 0) + 1;
+                    }
+                });
+            } catch (e) { }
+
+            // try to read player's existing answer so we can reflect it in the UI
+            let existingAnswer = null;
+            try {
+                if (currentGameId && currentPlayerId && window.fb && window.fb.get) {
+                    const playerRef = window.fb.ref(`games/${currentGameId}/players/${currentPlayerId}`);
+                    const snap = await window.fb.get(playerRef);
+                    const pdata = snap && snap.val ? snap.val() : snap || {};
+                    existingAnswer = (typeof pdata.currentAnswer === 'number') ? pdata.currentAnswer : null;
+                }
+            } catch (e) { /* ignore */ }
+
             q.options.forEach((opt, i) => {
                 const btn = document.createElement("button");
                 btn.className = "option-btn";
-                btn.textContent = String.fromCharCode(65 + i) + ". " + opt;
+                btn.dataset.index = String(i);
+                // left label
+                const left = document.createElement('div'); left.style.flex = '1';
+                left.textContent = String.fromCharCode(65 + i) + '. ' + opt;
+                // count badge
+                const cnt = document.createElement('div'); cnt.className = 'option-count'; cnt.textContent = String(counts[i] || 0);
+
+                btn.appendChild(left);
+                btn.appendChild(cnt);
                 btn.onclick = () => submitAnswer(i, btn, container);
+
+                // if player already answered, reflect it
+                if (existingAnswer !== null && existingAnswer === i) {
+                    try {
+                        btn.classList.add('selected');
+                        btn.setAttribute('aria-pressed', 'true');
+                        btn.dataset.selected = '1';
+                        btn.disabled = true;
+                        // inline fallback style so it's visible immediately
+                        btn.style.background = 'linear-gradient(180deg, rgba(59,130,246,0.08), #1e3a8a)';
+                        btn.style.borderColor = '#3b82f6';
+                        btn.style.boxShadow = '0 6px 18px rgba(59,130,246,0.06), inset 0 0 0 3px rgba(59,130,246,0.03)';
+                    } catch (e) { }
+                }
                 container.appendChild(btn);
             });
         }
@@ -1776,24 +1911,51 @@
 
             // determine container reliably (fallback to btn.parentElement)
             const containerEl = container || (btn && btn.parentElement) || document.getElementById('playerOptionsContainer');
-            // mark selection visibly and disable other buttons; also set aria/data attributes as a robustness fallback
+            const selIndex = String(choiceIndex);
+            console.log('submitAnswer: choiceIndex=', choiceIndex, 'btn.dataset.index=', btn && btn.dataset && btn.dataset.index);
+            // mark selection visibly and disable other buttons; prefer matching by data-index so
+            // remote updates or small DOM differences won't break element reference equality
+            let matched = false;
             Array.from(containerEl.children).forEach((b) => {
-                if (b === btn) {
+                const bi = (b.dataset && b.dataset.index) ? String(b.dataset.index) : null;
+                if (bi === selIndex) {
+                    matched = true;
                     b.classList.add("selected");
                     b.setAttribute('aria-pressed', 'true');
                     b.dataset.selected = '1';
-                    // inline fallback style to ensure highlight even if stylesheet not applied
-                    b.style.background = 'linear-gradient(180deg, rgba(250,204,21,0.06), #1f2937)';
-                    b.style.boxShadow = '0 6px 18px rgba(250,204,21,0.06), inset 0 0 0 3px rgba(250,204,21,0.03)';
+                    // inline style fallback to force visible highlight immediately
+                    try {
+                        b.style.background = 'linear-gradient(180deg, rgba(59,130,246,0.08), #1e3a8a)';
+                        b.style.borderColor = '#3b82f6';
+                        b.style.boxShadow = '0 6px 18px rgba(59,130,246,0.06), inset 0 0 0 3px rgba(59,130,246,0.03)';
+                    } catch (e) { }
                 } else {
                     b.classList.remove("selected");
                     b.removeAttribute('aria-pressed');
                     delete b.dataset.selected;
-                    b.style.background = '';
-                    b.style.boxShadow = '';
+                    try {
+                        b.style.background = '';
+                        b.style.borderColor = '';
+                        b.style.boxShadow = '';
+                    } catch (e) { }
                 }
                 b.disabled = true;
             });
+
+            // Fallback: if no child matched by data-index (e.g. DOM differences), ensure the
+            // clicked element itself is marked selected so user always sees feedback.
+            if (!matched && btn) {
+                console.warn('submitAnswer: no child matched by data-index, applying selected to clicked element as fallback');
+                try {
+                    btn.classList.add('selected');
+                    btn.setAttribute('aria-pressed', 'true');
+                    btn.dataset.selected = '1';
+                    btn.disabled = true;
+                    btn.style.background = 'linear-gradient(180deg, rgba(59,130,246,0.08), #1e3a8a)';
+                    btn.style.borderColor = '#3b82f6';
+                    btn.style.boxShadow = '0 6px 18px rgba(59,130,246,0.06), inset 0 0 0 3px rgba(59,130,246,0.03)';
+                } catch (e) { /* ignore */ }
+            }
             // force style reflow so highlight appears immediately
             void btn.offsetWidth;
             setText("playerStatusLabel", "Jawaban terkirim, tunggu host reveal.");
@@ -1810,15 +1972,73 @@
             const q = gameData.questions[idx];
             const correctIndex = q.correctIndex;
 
+            // compute counts and update UI
+            const counts = Array((q.options || []).length).fill(0);
+            const playersObj = gameData.players || {};
+            Object.values(playersObj).forEach((p) => {
+                if (typeof p.currentAnswer === 'number' && p.currentAnswer >= 0 && p.currentAnswer < counts.length) {
+                    counts[p.currentAnswer] = (counts[p.currentAnswer] || 0) + 1;
+                }
+            });
+
             const container = document.getElementById("playerOptionsContainer");
             Array.from(container.children).forEach((btn, i) => {
                 btn.disabled = true;
+                // update badge if present
+                const badge = btn.querySelector ? btn.querySelector('.option-count') : null;
+                if (badge) badge.textContent = String(counts[i] || 0);
                 if (i === correctIndex) {
                     btn.classList.add("correct");
+                    if (badge) badge.classList.add('correct');
+                } else {
+                    if (counts[i] > 0) btn.classList.add('wrong');
+                    if (badge) badge.classList.remove('correct');
                 }
             });
 
             setText("playerStatusLabel", "Jawaban benar telah ditampilkan. Lihat poinmu lalu tunggu soal berikutnya.");
+
+            // Play feedback audio for this player: success if their answer equals correctIndex
+            try {
+                const playersObj = gameData.players || {};
+                const me = (currentPlayerId && playersObj[currentPlayerId]) ? playersObj[currentPlayerId] : null;
+                const myAnswer = me && typeof me.currentAnswer === 'number' ? me.currentAnswer : null;
+                const isSuccess = (myAnswer !== null && myAnswer === correctIndex);
+                // only play when we have a current player id
+                if (currentPlayerId) playRandomFeedback(!!isSuccess);
+            } catch (e) { console.warn('play feedback determination failed', e); }
+        }
+
+        // audio pools for feedback
+        const successAudios = [
+            'assets/success/success1.mp3',
+            'assets/success/success2.mp3',
+            'assets/success/success3.mp3',
+            'assets/success/success4.mp3',
+            'assets/success/success5.mp3',
+            'assets/success/success6.mp3'
+        ];
+
+        const failAudios = [
+            'assets/fail/fail1.mp3',
+            'assets/fail/fail2.mp3',
+            'assets/fail/fail3.mp3',
+            'assets/fail/fail4.mp3',
+            'assets/fail/fail5.mp3',
+            'assets/fail/fail6.mp3',
+            'assets/fail/fail7.mp3',
+            'assets/fail/fail8.mp3',
+            'assets/fail/fail9.mp3'
+        ];
+
+        function playRandomFeedback(isSuccess) {
+            try {
+                const pool = isSuccess ? successAudios : failAudios;
+                const pick = pool[Math.floor(Math.random() * pool.length)];
+                const audio = new Audio(pick);
+                audio.volume = isSuccess ? 0.9 : 0.9;
+                audio.play().catch((e) => { console.warn('play feedback failed', e); });
+            } catch (e) { console.warn('playRandomFeedback error', e); }
         }
 
         function showPlayerSummary(gameData) {
@@ -1861,6 +2081,53 @@
             const ok = confirm('Are you sure you want to leave this game and join another?');
             if (ok) joinAnotherGame();
         }
+
+        // Delegated click fallback: ensure any clicked element with .option-btn is handled
+        // This helps when the page loaded an older version of the script or DOM differences
+        // — it guarantees the user sees immediate feedback and the answer is sent.
+        document.addEventListener('click', (ev) => {
+            try {
+                const el = ev.target && ev.target.closest ? ev.target.closest('.option-btn') : null;
+                if (!el) return;
+                // If already marked selected by primary handler, do nothing
+                if (el.dataset && el.dataset.selected === '1') return;
+
+                const container = el.parentElement || document.getElementById('playerOptionsContainer');
+                if (!container) return;
+
+                // mark selection and disable siblings
+                Array.from(container.children).forEach((b) => {
+                    if (b === el) {
+                        b.classList.add('selected');
+                        b.setAttribute('aria-pressed', 'true');
+                        b.dataset.selected = '1';
+                        try {
+                            b.style.background = 'linear-gradient(180deg, rgba(59,130,246,0.08), #1e3a8a)';
+                            b.style.borderColor = '#3b82f6';
+                            b.style.boxShadow = '0 6px 18px rgba(59,130,246,0.06), inset 0 0 0 3px rgba(59,130,246,0.03)';
+                        } catch (e) { }
+                    } else {
+                        b.classList.remove('selected');
+                        b.removeAttribute('aria-pressed');
+                        delete b.dataset.selected;
+                        try { b.style.background = ''; b.style.borderColor = ''; b.style.boxShadow = ''; } catch (e) { }
+                    }
+                    try { b.disabled = true; } catch (e) { }
+                });
+
+                console.log('delegated click: option selected, index=', el.dataset && el.dataset.index);
+                setText('playerStatusLabel', 'Jawaban terkirim, tunggu host reveal.');
+
+                // If player context available, send answer to Firebase (best-effort)
+                try {
+                    const idx = (el.dataset && typeof el.dataset.index !== 'undefined') ? parseInt(el.dataset.index, 10) : null;
+                    if (idx !== null && currentGameId && currentPlayerId && window.fb && window.fb.update) {
+                        const playerRef = window.fb.ref(`games/${currentGameId}/players/${currentPlayerId}`);
+                        window.fb.update(playerRef, { currentAnswer: idx, answerTime: window.fb.serverTimestamp() });
+                    }
+                } catch (e) { /* ignore */ }
+            } catch (e) { console.warn('delegated click handler error', e); }
+        });
     </script>
 </body>
 
