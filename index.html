@@ -1,0 +1,1867 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Quiz Battle - Kantor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Inline favicon to avoid 404 when serving locally -->
+    <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJ
+    bWFnZVJlYWR5ccllPAAAAA9QTFRFAAAA////AAAA////AAAA////AAAA////AAAA////AAAA////
+    AAAA////AAAA////AAAA////AAAA////AAAA////8n0C9QAAAAV0Uk5T/////wD7tg5TAAAAK0lE
+    QVQY02NgYGBgYGBgZGBgYGD4//8/AwPD////PwMDAwMDAwMAAAcQBBgA6Q0FkgAAAABJRU5ErkJg
+    gg==" />
+    <style>
+        /* player and leaderboard visuals */
+        .player-item,
+        .leaderboard-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 10px;
+            border-radius: 8px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.01), rgba(0, 0, 0, 0.02));
+            margin-bottom: 8px;
+        }
+
+        .player-item .left,
+        .leaderboard-item .left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .player-avatar-large {
+            width: 44px;
+            height: 44px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            background: #0b1220;
+            color: #f9fafb;
+            overflow: hidden;
+        }
+
+        .player-name {
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+        .player-points {
+            font-weight: 700;
+            background: #111827;
+            color: #f9fafb;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 13px;
+        }
+
+        /* players list (joined) - centered, left-to-right wrap, name under avatar */
+        #playersList {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
+            padding: 6px 0;
+        }
+
+        .player-pill {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 96px;
+            padding: 8px 6px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.01);
+            text-align: center;
+        }
+
+        .player-pill .avatar {
+            margin-bottom: 6px;
+        }
+
+        .player-pill .name {
+            font-weight: 700;
+            font-size: 13px;
+            color: #e6eef6;
+            max-width: 82px;
+            word-break: break-word;
+        }
+
+        /* question image area (consistent size) */
+        .question-image {
+            width: 100%;
+            max-height: 220px;
+            display: block;
+            margin: 8px 0;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #081017;
+            text-align: center;
+        }
+
+        .question-image img {
+            width: auto;
+            max-width: 100%;
+            max-height: 220px;
+            display: inline-block;
+        }
+
+        /* modal styles */
+        .modal {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 40;
+        }
+
+        .modal.hidden {
+            display: none;
+        }
+
+        .modal-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(2, 6, 23, 0.6);
+        }
+
+        .modal-content {
+            position: relative;
+            z-index: 41;
+            width: 320px;
+            background: #071022;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 12px 40px rgba(2, 6, 23, 0.6);
+            color: #e6eef6;
+        }
+
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #0f172a;
+            color: #f9fafb;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 900px;
+            width: 100%;
+            padding: 24px;
+            margin-left: auto;
+            margin-right: auto;
+            box-sizing: border-box;
+        }
+
+        /* player card constrained; host may use full container width */
+        #playerView .card {
+            margin-left: auto;
+            margin-right: auto;
+            max-width: 520px;
+        }
+
+        #hostView .card {
+            margin-left: auto;
+            margin-right: auto;
+            max-width: none;
+            width: 100%;
+        }
+
+        /* responsive sizes */
+        @media (min-width: 1100px) {
+            #playerView .card {
+                max-width: 640px;
+            }
+
+            .container {
+                max-width: 1400px;
+            }
+        }
+
+        @media (max-width: 600px) {
+            #playerView .card {
+                max-width: 100%;
+                padding: 14px;
+                border-radius: 12px;
+            }
+
+            #hostView .card {
+                max-width: 100%;
+                padding: 14px;
+                border-radius: 12px;
+            }
+        }
+
+        /* entry animation */
+        @keyframes cardEnter {
+            from {
+                opacity: 0;
+                transform: translateY(-10px) scale(0.995);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .card-enter {
+            animation: cardEnter 260ms cubic-bezier(.22, .9, .28, 1) both;
+        }
+
+        h1,
+        h2,
+        h3 {
+            margin-top: 0;
+        }
+
+        .card {
+            background: #020617;
+            position: relative;
+            transition: all 150ms ease;
+            border-radius: 16px;
+            padding: 20px;
+            border-color: #facc15;
+            background: linear-gradient(180deg, rgba(250, 204, 21, 0.06), #1f2937);
+            box-shadow: 0 6px 18px rgba(250, 204, 21, 0.06), inset 0 0 0 3px rgba(250, 204, 21, 0.03);
+            color: #fff;
+            border: 1px solid #1f2937;
+        }
+
+        .role-select button,
+        button {
+            padding: 10px 16px;
+            border-radius: 999px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+
+            .option-btn.selected::after {
+                content: "\2713";
+                position: absolute;
+                right: 12px;
+                top: 50%;
+                transform: translateY(-50%);
+                color: #facc15;
+                font-weight: 700;
+                font-size: 14px;
+                text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
+            }
+
+            /* ensure attribute-based pressed state also shows */
+            .option-btn[aria-pressed="true"] {
+                border-color: #facc15;
+                background: linear-gradient(180deg, rgba(250, 204, 21, 0.06), #1f2937);
+                box-shadow: 0 6px 18px rgba(250, 204, 21, 0.06), inset 0 0 0 3px rgba(250, 204, 21, 0.03);
+                color: #fff;
+            }
+
+            margin-right: 8px;
+            margin-bottom: 8px;
+        }
+
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #111827;
+            color: #e5e7eb;
+            border: 1px solid #374151;
+        }
+
+        .btn-danger {
+            background: #dc2626;
+            color: white;
+        }
+
+        input {
+            padding: 8px 10px;
+            border-radius: 999px;
+            border: 1px solid #4b5563;
+            background: #020617;
+            color: #f9fafb;
+            margin-bottom: 8px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        input::placeholder {
+            color: #6b7280;
+        }
+
+        .flex {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .options-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 10px;
+            margin-top: 12px;
+            margin-bottom: 18px;
+            /* gap between cards */
+        }
+
+        .avatar-grid {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+
+        .avatar-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            cursor: pointer;
+            border: 1px solid #374151;
+            background: #020617;
+            color: #f9fafb;
+        }
+
+        .avatar-btn.selected {
+            border-color: #facc15;
+            box-shadow: 0 6px 18px rgba(250, 204, 21, 0.06), inset 0 0 0 3px rgba(250, 204, 21, 0.03);
+            background: linear-gradient(180deg, rgba(250, 204, 21, 0.06), #1f2937);
+        }
+
+        .option-btn {
+            padding: 12px;
+            border-radius: 12px;
+            border: 1px solid #4b5563;
+            background: #020617;
+            cursor: pointer;
+            text-align: left;
+            font-size: 14px;
+            color: #f9fafb;
+            font-weight: 500;
+        }
+
+        .option-btn.selected {
+            border-color: #facc15;
+            background: #1f2937;
+        }
+
+        /* keep selected visible even when button is disabled */
+        .option-btn:disabled.selected {
+            opacity: 1;
+            filter: none;
+            cursor: default;
+            pointer-events: none;
+        }
+
+        .option-btn.correct {
+            border-color: #22c55e;
+            background: #14532d;
+        }
+
+        .option-btn.wrong {
+            border-color: #ef4444;
+            background: #7f1d1d;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            background: #111827;
+            border: 1px solid #374151;
+            margin-right: 4px;
+        }
+
+        .leaderboard-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px dashed #1f2937;
+            font-size: 14px;
+        }
+
+        .small {
+            font-size: 12px;
+            color: #9ca3af;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .pin-code {
+            font-size: 32px;
+            letter-spacing: 0.25em;
+            font-weight: 700;
+        }
+
+        .pill {
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 12px;
+            background: #111827;
+            border: 1px solid #1f2937;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .timer-label {
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        /* host panel sections: spacing and collapsible headers (animated) */
+        .host-section {
+            margin-bottom: 12px;
+            border-radius: 12px;
+            overflow: visible;
+            padding: 8px 12px;
+            /* inner spacing so headers don't stick */
+            background: rgba(255, 255, 255, 0.01);
+            border: 1px solid rgba(255, 255, 255, 0.02);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+        }
+
+        .host-section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            margin-bottom: 8px;
+            background: transparent;
+            color: #e5e7eb;
+            font-weight: 700;
+        }
+
+        .host-section-toggle {
+            background: transparent;
+            border: 1px solid #374151;
+            color: #e5e7eb;
+            padding: 6px 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .host-section .host-section-body {
+            transition: max-height 260ms cubic-bezier(.4, 0, .2, 1), opacity 180ms linear;
+            overflow: hidden;
+            max-height: 2000px;
+            opacity: 1;
+        }
+
+        .host-section.collapsed .host-section-body {
+            max-height: 0;
+            opacity: 0;
+        }
+
+        /* toggle-icon state controlled via JS */
+
+        @media (max-width: 600px) {
+            .pin-code {
+                font-size: 24px;
+            }
+        }
+
+        /* safety: ensure player/host view containers are statically positioned; do NOT force display so .hidden works */
+        #playerView,
+        #hostView {
+            position: static !important;
+            left: auto !important;
+            right: auto !important;
+            top: auto !important;
+            bottom: auto !important;
+        }
+
+        /* Defensive: neutralize any unexpected horizontal transforms or negative margins
+           that might be coming from computed styles or injected rules in the environment. */
+        .container,
+        #hostView,
+        #playerView,
+        .card {
+            transform: none !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+            left: auto !important;
+            right: auto !important;
+            box-sizing: border-box !important;
+        }
+    </style>
+
+    <!-- Firebase (modular) -->
+    <script type="module">
+        // Load external config if present, otherwise inline script will call initFirebase
+        async function loadFirebaseConfig() {
+            try {
+                const resp = await fetch('./firebase-config.json');
+                if (!resp.ok) throw new Error('config not found');
+                return await resp.json();
+            } catch (e) {
+                return null;
+            }
+        }
+
+        const externalConfig = await loadFirebaseConfig();
+
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+        import {
+            getDatabase,
+            ref as r,
+            push as p,
+            set as s,
+            update as u,
+            get as g,
+            onValue as ov,
+            child as ch,
+            serverTimestamp as st
+        } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
+
+        let initialized = false;
+
+        function initFirebase(cfg) {
+            if (initialized) return;
+            const configToUse = cfg || externalConfig;
+            if (!configToUse) return; // wait for inline init call
+            try {
+                const app = initializeApp(configToUse);
+                const db = getDatabase(app);
+                // expose simple helpers for non-module script usage
+                window.fb = {
+                    db,
+                    ref: (path) => r(db, path),
+                    push: (refArg) => p(refArg),
+                    set: (refArg, val) => s(refArg, val),
+                    update: (refArg, val) => u(refArg, val),
+                    get: (refArg) => g(refArg),
+                    onValue: (refArg, cb) => ov(refArg, cb),
+                    child: (refArg, key) => ch(refArg, key),
+                    serverTimestamp: () => st()
+                };
+                initialized = true;
+            } catch (e) {
+                console.error('Firebase init failed', e);
+            }
+        }
+
+        // auto-init if external config exists
+        if (externalConfig) initFirebase(externalConfig);
+
+        // allow inline script to initialize with its firebaseConfig
+        window.initFirebase = function (cfg) {
+            initFirebase(cfg);
+        };
+    </script>
+</head>
+
+<body>
+    <div class="container">
+        <div class="card" id="roleCard">
+            <h1>🏆 Quiz Battle Kantor</h1>
+            <p>Pilih peran kamu:</p>
+            <div class="role-select">
+                <button class="btn-primary" onclick="selectHostRole()">Saya Host</button>
+                <button class="btn-secondary" onclick="selectRole('player')">Saya Peserta</button>
+            </div>
+            <p class="small">Host buka ini di laptop & share layar. Peserta buka link yang sama di HP.</p>
+        </div>
+
+        <!-- Host password modal -->
+        <div id="hostPasswordModal" class="modal hidden" role="dialog" aria-modal="true"
+            aria-labelledby="hostPasswordTitle">
+            <div class="modal-overlay" onclick="closeHostPasswordModal()"></div>
+            <div class="modal-content" role="document">
+                <h3 id="hostPasswordTitle">Masuk sebagai Host</h3>
+                <p class="small">Masukkan password untuk masuk sebagai host.</p>
+                <input id="hostPasswordInput" type="password" autocomplete="current-password" placeholder="Password"
+                    style="width:100%;padding:8px;margin-top:8px;border-radius:8px;border:1px solid #23303a;background:#061017;color:#f9fafb;" />
+                <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+                    <button class="btn-primary" onclick="submitHostPassword()">Masuk</button>
+                    <button class="btn-secondary" onclick="closeHostPasswordModal()">Batal</button>
+                </div>
+                <p id="hostPasswordError" class="small" style="color:#ffb4b4;margin-top:8px;display:none;"></p>
+            </div>
+        </div>
+
+        <!-- HOST VIEW -->
+        <div id="hostView" class="hidden">
+            <div class="card">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <h2 style="margin:0">👑 Host Panel</h2>
+                    <div>
+                        <button class="btn-secondary" onclick="goToRoleSelection()">Kembali</button>
+                    </div>
+                </div>
+                <div id="hostLobbySection" class="host-section">
+                    <div class="host-section-header">
+                        <span>Lobby / Create</span>
+                        <button class="host-section-toggle" onclick="toggleHostSection('hostLobbySection')"><span
+                                class="toggle-icon">▼</span></button>
+                    </div>
+                    <div class="host-section-body">
+                        <p>Status: <span class="badge" id="hostStatusBadge">Belum mulai</span></p>
+                        <button class="btn-primary" onclick="createGame()">Buat Game Baru</button>
+                        <div style="margin-top:12px;">
+                            <input type="text" id="hostResumePinInput" placeholder="PIN untuk lanjutkan game"
+                                style="width:200px; display:inline-block;" />
+                            <button class="btn-secondary" onclick="tryResumeGame()">Lanjutkan Game</button>
+                            <p class="small" id="hostResumeError"></p>
+                        </div>
+                        <p class="small">Klik "Buat Game Baru" lalu share PIN ke peserta.</p>
+                    </div>
+                </div>
+
+                <div id="hostGameInfo" class="hidden host-section">
+                    <div class="host-section-header">
+                        <span>Game Info</span>
+                        <button class="host-section-toggle" onclick="toggleHostSection('hostGameInfo')"><span
+                                class="toggle-icon">▼</span></button>
+                    </div>
+                    <div class="host-section-body">
+                        <p>PIN Game:</p>
+                        <div class="pin-code" id="gamePinDisplay">----</div>
+                        <p class="small">Peserta masuk ke: <strong>link ini</strong> lalu masukkan PIN dan nama.</p>
+                        <p><strong>Peserta bergabung:</strong></p>
+                        <div id="playersList"></div>
+
+                        <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+                            <button class="btn-primary" onclick="startGame()">Mulai Quiz</button>
+                            <button class="btn-secondary" onclick="endGame()">Akhiri Game</button>
+                        </div>
+
+
+
+                    </div>
+                </div>
+                <!-- Questions & Controls (placed below Game Info) -->
+                <div id="hostQuestionCard" class="host-section hidden" style="margin-top:12px;">
+                    <div class="host-section-header">
+                        <span>Questions & Controls</span>
+                        <button class="host-section-toggle" onclick="toggleHostSection('hostQuestionCard')"><span
+                                class="toggle-icon">▼</span></button>
+                    </div>
+                    <div class="host-section-body">
+                        <div class="flex" style="justify-content: space-between; align-items: center;">
+                            <div>
+                                <h3 id="hostQuestionTitle">Pertanyaan</h3>
+                                <p class="small">
+                                    No. <span id="questionIndexLabel"></span> dari <span id="questionTotalLabel"></span>
+                                </p>
+                            </div>
+                            <div style="text-align: right;">
+                                <div>
+                                    <span class="pill">Status: <span id="hostGamePhaseLabel">Lobby</span></span>
+                                </div>
+                                <div class="timer-label">
+                                    ⏱ <span id="hostTimerLabel">10.0s</span>
+                                </div>
+                            </div>
+
+                            <div style="margin-top:8px;">
+                                <span class="small">Mulai dalam: <strong><span
+                                            id="hostCountdownLabel">10.0s</span></strong></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="question-image" id="hostQuestionImage" style="display:none;"></div>
+                    <p id="hostQuestionText"></p>
+                    <div class="options-grid" id="hostOptionsContainer"></div>
+
+                    <div style="margin-top: 16px;">
+                        <button class="btn-primary" onclick="nextQuestion()">Next Question</button>
+                        <button class="btn-secondary" onclick="revealAnswer()">Reveal Answer & Score</button>
+                    </div>
+
+                    <div style="margin-top: 16px;">
+                        <h4>Leaderboard</h4>
+                        <div id="hostLeaderboard"></div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+        <!-- PLAYER VIEW -->
+        <div id="playerView" class="hidden">
+            <div class="card" id="playerJoinCard">
+                <h2>🙋 Masuk sebagai Peserta</h2>
+                <input type="text" id="playerNameInput" placeholder="Nama kamu" />
+                <div>
+                    <p class="small">Pilih ikon profil:</p>
+                    <div class="avatar-grid" id="avatarPicker">
+                        <button class="avatar-btn" data-avatar="😀" onclick="selectPlayerAvatar('😀', this)">😀</button>
+                        <button class="avatar-btn" data-avatar="😎" onclick="selectPlayerAvatar('😎', this)">😎</button>
+                        <button class="avatar-btn" data-avatar="🦊" onclick="selectPlayerAvatar('🦊', this)">🦊</button>
+                        <button class="avatar-btn" data-avatar="🐱" onclick="selectPlayerAvatar('🐱', this)">🐱</button>
+                        <button class="avatar-btn" data-avatar="🐼" onclick="selectPlayerAvatar('🐼', this)">🐼</button>
+                        <button class="avatar-btn" data-avatar="🤖" onclick="selectPlayerAvatar('🤖', this)">🤖</button>
+                        <button class="avatar-btn" data-avatar="🐸" onclick="selectPlayerAvatar('🐸', this)">🐸</button>
+                        <!-- stone head and animals -->
+                        <button class="avatar-btn" data-avatar="🗿" onclick="selectPlayerAvatar('🗿', this)">🗿</button>
+                        <button class="avatar-btn" data-avatar="🐶" onclick="selectPlayerAvatar('🐶', this)">🐶</button>
+                        <button class="avatar-btn" data-avatar="🦁" onclick="selectPlayerAvatar('🦁', this)">🦁</button>
+                        <button class="avatar-btn" data-avatar="🐯" onclick="selectPlayerAvatar('🐯', this)">🐯</button>
+                        <button class="avatar-btn" data-avatar="🐼" onclick="selectPlayerAvatar('🐼', this)">🐼</button>
+                        <button class="avatar-btn" data-avatar="🤪" onclick="selectPlayerAvatar('🤪', this)">🤪</button>
+                        <button class="avatar-btn" data-avatar="🥸" onclick="selectPlayerAvatar('🥸', this)">🥸</button>
+                        <button class="avatar-btn" data-avatar="🤡" onclick="selectPlayerAvatar('🤡', this)">🤡</button>
+                    </div>
+                    <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+                        <input id="avatarUrlInput" placeholder="Paste your own image URL"
+                            style="flex:1; padding:6px; border-radius:8px;" />
+                        <button class="btn-secondary" onclick="useAvatarUrl()">Gunakan</button>
+                        <div id="avatarPreview"
+                            style="width:44px;height:44px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;margin-left:8px;background:#0b1220;border:1px solid #25303a;color:#f9fafb;">
+                            ?</div>
+                    </div>
+                </div>
+                <input type="text" id="pinInput" placeholder="PIN Game" />
+                <button class="btn-primary" onclick="joinGame()">Gabung</button>
+                <p class="small" id="playerJoinError"></p>
+            </div>
+
+            <div class="card hidden" id="playerWaitingCard">
+                <h3>Menunggu mulai...</h3>
+                <p>Hai, <span id="playerNameLabel"></span> 👋</p>
+                <p>PIN Game: <strong id="playerGamePinLabel"></strong></p>
+                <p class="small">Host akan segera memulai quiz.</p>
+                <p class="small">Dimulai dalam: <strong><span id="playerCountdownLabel">10.0s</span></strong></p>
+                <div style="margin-top:12px;">
+                    <button class="btn-secondary" onclick="confirmAndJoinAnotherGame()">Gabung game lain</button>
+                    <button class="btn-secondary" onclick="goToRoleSelection()">Kembali</button>
+                </div>
+            </div>
+
+            <div class="card hidden" id="playerQuestionCard">
+                <div class="flex" style="justify-content: space-between; align-items: center;">
+                    <div>
+                        <h3 id="playerQuestionText"></h3>
+                        <p class="small">Pertanyaan ke-<span id="playerQuestionIndexLabel"></span></p>
+                    </div>
+                    <div class="timer-label">
+                        ⏱ <span id="playerTimerLabel">10.0s</span>
+                    </div>
+                </div>
+
+                <div class="question-image" id="playerQuestionImage" style="display:none;"></div>
+                <div class="options-grid" id="playerOptionsContainer"></div>
+                <p class="small" id="playerStatusLabel"></p>
+                <p class="small" id="playerGainLabel"></p>
+                <p class="small" id="playerTotalScoreLabel"></p>
+                <div style="margin-top:12px;">
+                    <button class="btn-secondary" onclick="confirmAndJoinAnotherGame()">Gabung game lain</button>
+                    <button class="btn-secondary" onclick="goToRoleSelection()">Kembali</button>
+                </div>
+            </div>
+
+            <div class="card hidden" id="playerSummaryCard">
+                <h2>🎉 Selesai!</h2>
+                <p>Skor kamu: <strong><span id="playerFinalScore"></span></strong></p>
+                <p class="small">Terima kasih sudah bermain 🙌</p>
+                <div style="margin-top:12px;">
+                    <button class="btn-primary" onclick="joinAnotherGame()">Gabung game lain</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        // =============== CONFIG FIREBASE ===============
+
+        // Try to load firebase config from external file `firebase-config.json` (convenient for local dev)
+        async function initFirebaseFromFileOrInline() {
+            let cfg = null;
+            try {
+                const res = await fetch('firebase-config.json', { cache: 'no-store' });
+                if (res.ok) {
+                    cfg = await res.json();
+                    console.log('Loaded firebase-config.json');
+                } else {
+                    console.log('firebase-config.json not found, using inline config');
+                }
+            } catch (e) {
+                console.log('Could not fetch firebase-config.json, using inline config', e);
+            }
+
+            // prefer external config when present
+            const toUse = cfg;
+            if (window.initFirebase) {
+                try { window.initFirebase(toUse); } catch (e) { console.warn('initFirebase failed', e); }
+            }
+
+            // helper reference to modular DB helpers (window.fb). Will be set after init.
+            var db = window.fb ? window.fb.db : null;
+
+            // wait a short moment for fb to be ready then restore local state
+            for (let i = 0; i < 20; i++) {
+                if (window.fb) break;
+                await new Promise(r => setTimeout(r, 50));
+            }
+            db = window.fb ? window.fb.db : null;
+            restoreState();
+        }
+
+        initFirebaseFromFileOrInline();
+
+        // ===== Persistence helpers =====
+        function saveLocalState(obj) {
+            try {
+                const s = Object.assign({}, obj);
+                localStorage.setItem('quizbattle_state', JSON.stringify(s));
+            } catch (e) { console.warn('saveLocalState failed', e); }
+        }
+
+        function loadLocalState() {
+            try {
+                const raw = localStorage.getItem('quizbattle_state');
+                if (!raw) return null;
+                return JSON.parse(raw);
+            } catch (e) { return null; }
+        }
+
+        function clearLocalState() {
+            try { localStorage.removeItem('quizbattle_state'); } catch (e) { }
+        }
+
+        // restore state after firebase init and reattach listeners
+        async function restoreState() {
+            const st = loadLocalState();
+            if (!st) return;
+            // reinitialize role UI
+            if (st.role) {
+                selectRole(st.role);
+            }
+            if (st.role === 'host' && st.currentGameId) {
+                currentGameId = st.currentGameId;
+                // reattach host listeners
+                listenPlayers(currentGameId);
+                listenGameChanges(currentGameId);
+                document.getElementById('hostGameInfo').classList.remove('hidden');
+                setText('gamePinDisplay', st.pin || '----');
+            }
+            if (st.role === 'player' && st.currentGameId && st.currentPlayerId) {
+                currentGameId = st.currentGameId;
+                currentPlayerId = st.currentPlayerId;
+                // reattach player listeners
+                listenGameAsPlayer(currentGameId);
+                document.getElementById('playerJoinCard').classList.add('hidden');
+                document.getElementById('playerWaitingCard').classList.remove('hidden');
+                setText('playerNameLabel', st.playerName || '');
+                setText('playerGamePinLabel', st.pin || '');
+                // restore avatar pick UI if present
+                if (st.playerAvatar) {
+                    selectedAvatar = st.playerAvatar;
+                    const picker = document.getElementById('avatarPicker');
+                    if (picker) {
+                        Array.from(picker.children).forEach((b) => {
+                            if (b.dataset && b.dataset.avatar === selectedAvatar) b.classList.add('selected'); else b.classList.remove('selected');
+                        });
+                    }
+                }
+            }
+        }
+
+        // =============== STATE & PERTANYAAN ===============
+
+        var role = null;
+        var currentGameId = null;
+        var currentPlayerId = null;
+        var currentQuestionIndex = -1;
+
+        const QUESTION_DURATION_MS = 10000; // 10 detik
+        const MAX_SCORE_PER_QUESTION = 10000; // skor awal
+        const COUNTDOWN_MS = 10000; // countdown sebelum soal pertama
+
+        // Timer handler
+        let hostTimerInterval = null;
+        let playerTimerInterval = null;
+        // map of countdown intervals per label id so multiple countdowns can run independently
+        let countdownIntervals = {};
+        let countdownTriggeredForGame = {};
+
+        // Audio context untuk sound effect
+        let audioCtx = null;
+
+        function playSound(type) {
+            try {
+                if (!audioCtx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    audioCtx = new AudioContext();
+                }
+                const ctx = audioCtx;
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+
+                if (type === "timer") {
+                    osc.frequency.value = 900;
+                } else if (type === "reveal") {
+                    osc.frequency.value = 600;
+                } else if (type === "end") {
+                    osc.frequency.value = 350;
+                } else {
+                    osc.frequency.value = 500;
+                }
+
+                gain.gain.setValueAtTime(0.001, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.01);
+                gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
+
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.25);
+            } catch (e) {
+                console.log("Audio error:", e);
+            }
+        }
+
+        let questions = [
+            {
+                text: "Berapa lama durasi kerja normal per hari (umum) di kantor?",
+                options: ["5 jam", "7 jam", "8 jam", "10 jam"],
+                image: "assets/q1.svg",
+                correctIndex: 2
+            },
+            {
+                text: "Istilah 'standup meeting' biasanya berlangsung berapa lama?",
+                options: ["5–15 menit", "30–60 menit", "2 jam", "Seharian"],
+                image: "assets/q2.svg",
+                correctIndex: 0
+            },
+            {
+                text: "Manakah yang BUKAN termasuk komunikasi di kantor?",
+                options: ["Email", "Chat", "Tatap muka", "Telepati"],
+                image: "assets/q3.svg",
+                correctIndex: 3
+            },
+            {
+                text: "Apa arti 'WFH'?",
+                options: ["Work For Home", "Work From Home", "Wait From Home", "Work Full Hour"],
+                image: "assets/q4.svg",
+                correctIndex: 1
+            },
+            {
+                text: "Tools mana yang biasa dipakai untuk meeting online?",
+                options: ["Zoom", "Paint", "Notepad", "Winamp"],
+                image: "assets/q_example.png",
+                correctIndex: 0
+            }
+        ];
+
+        // avatar state for player
+        var selectedAvatar = null;
+
+        function selectPlayerAvatar(emoji, btn) {
+            selectedAvatar = emoji;
+            // clear other buttons
+            const container = document.getElementById('avatarPicker');
+            if (container) {
+                Array.from(container.children).forEach((b) => {
+                    if (b === btn) b.classList.add('selected'); else b.classList.remove('selected');
+                });
+            }
+            // persist selection for convenience
+            const st = loadLocalState() || {};
+            st.playerName = st.playerName || (document.getElementById('playerNameInput') ? document.getElementById('playerNameInput').value : '') || '';
+            st.playerAvatar = selectedAvatar;
+            saveLocalState(st);
+            // update preview
+            const preview = document.getElementById('avatarPreview');
+            if (preview) preview.innerHTML = renderAvatarHtml(selectedAvatar) || '?';
+        }
+
+        function useAvatarUrl() {
+            const url = (document.getElementById('avatarUrlInput') || {}).value || '';
+            if (!url) return;
+            selectedAvatar = url;
+            // clear avatar buttons selection
+            const container = document.getElementById('avatarPicker');
+            if (container) Array.from(container.children).forEach(b => b.classList.remove('selected'));
+            // persist
+            const st = loadLocalState() || {};
+            st.playerAvatar = selectedAvatar;
+            saveLocalState(st);
+            // update preview to show image
+            const preview = document.getElementById('avatarPreview');
+            if (preview) preview.innerHTML = renderAvatarHtml(selectedAvatar) || '?';
+        }
+
+        function renderAvatarHtml(avatar, size = 28) {
+            if (!avatar) return '';
+            const borderRadius = Math.max(6, Math.round(size * 0.18));
+            const styleBase = `width:${size}px;height:${size}px;border-radius:${borderRadius}px;object-fit:cover;vertical-align:middle;display:inline-block;overflow:hidden;`;
+            if (typeof avatar === 'string' && (avatar.startsWith('http://') || avatar.startsWith('https://'))) {
+                return `<img src="${avatar}" alt="avatar" style="${styleBase}margin-right:8px;"/>`;
+            }
+            // emoji or short text
+            const fontSize = Math.max(12, Math.round(size * 0.6));
+            return `<span style="${styleBase}background:#111827;color:#f9fafb;display:flex;align-items:center;justify-content:center;margin-right:8px;font-size:${fontSize}px;">${avatar}</span>`;
+        }
+
+        // =============== HELPER ===============
+
+        function toggleHostSection(id) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const isCollapsed = el.classList.toggle('collapsed');
+            const body = el.querySelector('.host-section-body');
+            if (body) body.style.display = isCollapsed ? 'none' : '';
+            // add spacing when expanded
+            if (!isCollapsed) el.style.marginBottom = '16px'; else el.style.marginBottom = '8px';
+            // update icon
+            const icon = el.querySelector('.toggle-icon');
+            if (icon) icon.textContent = isCollapsed ? '▲' : '▼';
+        }
+
+        // initialize toggle icons for host sections
+        document.addEventListener('DOMContentLoaded', () => {
+            ['hostLobbySection', 'hostGameInfo', 'hostQuestionCard'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const icon = el.querySelector('.toggle-icon');
+                if (icon) {
+                    const isCollapsed = el.classList.contains('collapsed');
+                    icon.textContent = isCollapsed ? '▲' : '▼';
+                }
+            });
+        });
+
+        function selectRole(selected) {
+            role = selected;
+            document.getElementById("roleCard").classList.add("hidden");
+            if (role === "host") {
+                const hv = document.getElementById("hostView");
+                hv.classList.remove("hidden");
+                const card = hv.querySelector('.card'); if (card) { card.classList.remove('card-enter'); void card.offsetWidth; card.classList.add('card-enter'); }
+            } else {
+                const pv = document.getElementById("playerView");
+                pv.classList.remove("hidden");
+                const card = pv.querySelector('.card'); if (card) { card.classList.remove('card-enter'); void card.offsetWidth; card.classList.add('card-enter'); }
+            }
+        }
+
+        function goToRoleSelection() {
+            // preserve player name if available
+            const name = (document.getElementById('playerNameLabel') ? document.getElementById('playerNameLabel').textContent : '') || (document.getElementById('playerNameInput') ? document.getElementById('playerNameInput').value : '') || '';
+
+            // If user is currently in a game (host or player), confirm before navigating back
+            const isInGame = !!(currentGameId || currentPlayerId || role === 'host');
+            if (isInGame) {
+                const ok = confirm('Kembali ke pemilihan peran akan meninggalkan game saat ini. Lanjutkan?');
+                if (!ok) return; // abort navigation
+            }
+
+            // clear role/UI
+            const hv = document.getElementById('hostView'); if (hv) hv.classList.add('hidden');
+            const pv = document.getElementById('playerView'); if (pv) pv.classList.add('hidden');
+            document.getElementById('roleCard').classList.remove('hidden');
+            // clear persisted role but keep name
+            saveLocalState({ role: null, playerName: name });
+            role = null;
+            currentGameId = null;
+            currentPlayerId = null;
+            // prefill name input
+            const nameInput = document.getElementById('playerNameInput'); if (nameInput) nameInput.value = name;
+        }
+
+        function selectHostRole() {
+            // open styled modal
+            document.getElementById('hostPasswordModal').classList.remove('hidden');
+            const input = document.getElementById('hostPasswordInput');
+            if (input) { input.value = ''; input.focus(); }
+            const err = document.getElementById('hostPasswordError'); if (err) err.style.display = 'none';
+            // attach escape handler
+            setTimeout(() => { document.addEventListener('keydown', hostModalKeyHandler); }, 0);
+        }
+
+        function closeHostPasswordModal() {
+            document.getElementById('hostPasswordModal').classList.add('hidden');
+            document.removeEventListener('keydown', hostModalKeyHandler);
+        }
+
+        function hostModalKeyHandler(e) {
+            if (e.key === 'Escape') closeHostPasswordModal();
+            if (e.key === 'Enter') submitHostPassword();
+        }
+
+        function submitHostPassword() {
+            const input = document.getElementById('hostPasswordInput');
+            const err = document.getElementById('hostPasswordError');
+            if (!input) return;
+            const v = (input.value || '').trim();
+            if (v === 'abduarrahman') {
+                closeHostPasswordModal();
+                selectRole('host');
+            } else {
+                if (err) { err.textContent = 'Password salah.'; err.style.display = ''; }
+                // clear input to avoid visible typing
+                input.value = '';
+                input.focus();
+            }
+        }
+
+        function generateGamePin() {
+            return Math.floor(100000 + Math.random() * 900000).toString();
+        }
+
+        function setText(id, text) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = text;
+        }
+
+        function clearElement(el) {
+            while (el.firstChild) el.removeChild(el.firstChild);
+        }
+
+        function resetHostTimer() {
+            if (hostTimerInterval) {
+                clearInterval(hostTimerInterval);
+                hostTimerInterval = null;
+            }
+            setText("hostTimerLabel", "10.0s");
+        }
+
+        function resetPlayerTimer() {
+            if (playerTimerInterval) {
+                clearInterval(playerTimerInterval);
+                playerTimerInterval = null;
+            }
+            setText("playerTimerLabel", "10.0s");
+        }
+
+        function startTimer(labelId, startedAtMs, isHost) {
+            const label = document.getElementById(labelId);
+            const startTime = startedAtMs || Date.now();
+
+            const update = () => {
+                const now = Date.now();
+                const remaining = QUESTION_DURATION_MS - (now - startTime);
+                if (remaining <= 0) {
+                    label.textContent = "0.0s";
+                    if (isHost) {
+                        clearInterval(hostTimerInterval);
+                        hostTimerInterval = null;
+                    } else {
+                        clearInterval(playerTimerInterval);
+                        playerTimerInterval = null;
+                    }
+                    return;
+                }
+                label.textContent = (remaining / 1000).toFixed(1) + "s";
+            };
+
+            update();
+            if (isHost) {
+                if (hostTimerInterval) clearInterval(hostTimerInterval);
+                hostTimerInterval = setInterval(update, 100);
+            } else {
+                if (playerTimerInterval) clearInterval(playerTimerInterval);
+                playerTimerInterval = setInterval(update, 100);
+            }
+        }
+
+        // Generic countdown that counts down to (startAt + durationMs)
+        function startCountdown(labelId, startedAtMs, durationMs, onFinish) {
+            const label = document.getElementById(labelId);
+            if (!label) return;
+            // clear any existing interval for this label
+            if (countdownIntervals[labelId]) { clearInterval(countdownIntervals[labelId]); delete countdownIntervals[labelId]; }
+
+            // normalize startedAtMs: if firebase returned a placeholder (object), try to extract timestamp or fallback to now
+            if (typeof startedAtMs !== 'number' || isNaN(startedAtMs)) {
+                // If it's an object with a .toMillis or similar, attempt best-effort
+                try {
+                    if (startedAtMs && typeof startedAtMs === 'object') {
+                        // firebase sometimes returns {'.sv': 'timestamp'} when reading before server resolution; fallback to Date.now()
+                        console.log('startCountdown: startedAtMs is object, falling back to Date.now()', startedAtMs);
+                    }
+                } catch (e) { }
+                startedAtMs = Date.now();
+            }
+
+            const update = () => {
+                const now = Date.now();
+                const remaining = durationMs - (now - startedAtMs);
+                if (remaining <= 0) {
+                    label.textContent = "0.0s";
+                    if (countdownIntervals[labelId]) { clearInterval(countdownIntervals[labelId]); delete countdownIntervals[labelId]; }
+                    if (onFinish) onFinish();
+                    return;
+                }
+                label.textContent = (remaining / 1000).toFixed(1) + "s";
+            };
+
+            update();
+            countdownIntervals[labelId] = setInterval(update, 100);
+        }
+
+        // =============== HOST LOGIC ===============
+
+        async function createGame() {
+            const pin = generateGamePin();
+            const gamesRef = window.fb.ref("games");
+            const newRef = window.fb.push(gamesRef);
+
+            const gameData = {
+                pin,
+                phase: "lobby",
+                createdAt: Date.now(),
+                currentQuestionIndex: -1,
+                questionStartAt: null,
+                questions,
+            };
+
+            await window.fb.set(newRef, gameData);
+            currentGameId = newRef.key;
+
+            document.getElementById("hostGameInfo").classList.remove("hidden");
+            setText("gamePinDisplay", pin);
+            setText("hostStatusBadge", "Lobby");
+            setText("hostGamePhaseLabel", "Lobby");
+
+            listenPlayers(currentGameId);
+            listenGameChanges(currentGameId);
+            // persist host state
+            saveLocalState({ role: 'host', currentGameId, pin });
+            // Play battle audio for host when creating a game
+            try {
+                if (role === 'host' || true) { // role may not be set yet; check hostView visibility instead
+                    const hv = document.getElementById('hostView');
+                    if (hv && !hv.classList.contains('hidden')) {
+                        const audio = new Audio('assets/pokemon-battle.mp3');
+                        audio.volume = 0.9;
+                        audio.play().catch((err) => { console.log('Create-game audio blocked:', err); });
+                    }
+                }
+            } catch (e) { console.warn('createGame audio error', e); }
+        }
+
+        function listenPlayers(gameId) {
+            const playersRef = window.fb.ref(`games/${gameId}/players`);
+            window.fb.onValue(playersRef, (snap) => {
+                const data = snap.val ? snap.val() : snap || {};
+                const container = document.getElementById("playersList");
+                clearElement(container);
+                // render as centered pills (no points) and randomize order
+                const playersArr = Object.values(data || {});
+                // shuffle
+                for (let i = playersArr.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [playersArr[i], playersArr[j]] = [playersArr[j], playersArr[i]];
+                }
+                playersArr.forEach((p) => {
+                    const pill = document.createElement('div');
+                    pill.className = 'player-pill';
+                    const avatarWrap = document.createElement('div'); avatarWrap.className = 'avatar';
+                    avatarWrap.innerHTML = renderAvatarHtml(p.avatar, 48);
+                    const nameEl = document.createElement('div'); nameEl.className = 'name'; nameEl.textContent = p.name || 'Player';
+                    pill.appendChild(avatarWrap);
+                    pill.appendChild(nameEl);
+                    container.appendChild(pill);
+                });
+            });
+        }
+
+        function listenGameChanges(gameId) {
+            const gameRef = window.fb.ref(`games/${gameId}`);
+            window.fb.onValue(gameRef, (snap) => {
+                const data = snap.val ? snap.val() : snap || {};
+                if (!data) return;
+
+                setText("hostStatusBadge", data.phase.toUpperCase());
+                setText("hostGamePhaseLabel", data.phase);
+
+                const prevIdx = currentQuestionIndex;
+                const newIdx = data.currentQuestionIndex ?? -1;
+                currentQuestionIndex = newIdx;
+
+                // Show Questions & Controls only when game is not in lobby
+                const hq = document.getElementById('hostQuestionCard');
+                if (hq) {
+                    if (data.phase && data.phase !== 'lobby') {
+                        hq.classList.remove('hidden');
+                    } else {
+                        hq.classList.add('hidden');
+                    }
+                }
+
+                // Starting phase: show countdown to players and host
+                if (data.phase === "starting") {
+                    // Ensure Questions & Controls card is visible for host but hide actual question content until countdown finishes
+                    const hostQText = document.getElementById('hostQuestionText');
+                    const hostOptions = document.getElementById('hostOptionsContainer');
+                    const hostImg = document.getElementById('hostQuestionImage');
+                    if (hostQText) hostQText.textContent = '';
+                    if (hostOptions) clearElement(hostOptions);
+                    if (hostImg) { hostImg.style.display = 'none'; hostImg.innerHTML = ''; }
+
+                    // start synchronized countdown for host and players
+                    // If startingAt is not yet a numeric server timestamp (firebase may return a placeholder),
+                    // poll briefly until it resolves, otherwise fallback to Date.now(). This avoids the host
+                    // seeing no countdown when the server timestamp hasn't propagated yet.
+                    const hostLabel = document.getElementById('hostCountdownLabel');
+                    if (hostLabel && (!data.startingAt || typeof data.startingAt !== 'number')) {
+                        // show an initial value so host sees something immediately
+                        hostLabel.textContent = (COUNTDOWN_MS / 1000).toFixed(1) + 's';
+                    }
+
+                    const scheduleCountdownWithResolvedTs = async () => {
+                        try {
+                            // try to read the resolved startingAt for a short window
+                            let resolved = false;
+                            for (let i = 0; i < 20; i++) {
+                                const snap2 = await window.fb.get(gameRef);
+                                const val2 = snap2 && snap2.val ? snap2.val() : snap2 || {};
+                                if (val2 && typeof val2.startingAt === 'number') {
+                                    startCountdown('hostCountdownLabel', val2.startingAt, COUNTDOWN_MS, null);
+                                    startCountdown('playerCountdownLabel', val2.startingAt, COUNTDOWN_MS, null);
+                                    resolved = true;
+                                    break;
+                                }
+                                await new Promise(r => setTimeout(r, 250));
+                            }
+                            if (!resolved) {
+                                console.log('startCountdown: startingAt did not resolve, falling back to local Date.now()');
+                                const now = Date.now();
+                                startCountdown('hostCountdownLabel', now, COUNTDOWN_MS, null);
+                                startCountdown('playerCountdownLabel', now, COUNTDOWN_MS, null);
+                            }
+                        } catch (e) {
+                            console.warn('startCountdown polling failed', e);
+                            const now = Date.now();
+                            startCountdown('hostCountdownLabel', now, COUNTDOWN_MS, null);
+                            startCountdown('playerCountdownLabel', now, COUNTDOWN_MS, null);
+                        }
+                    };
+
+                    if (data.startingAt && typeof data.startingAt === 'number') {
+                        startCountdown('hostCountdownLabel', data.startingAt, COUNTDOWN_MS, null);
+                        startCountdown('playerCountdownLabel', data.startingAt, COUNTDOWN_MS, null);
+                    } else {
+                        // kick off polling/resolution without blocking
+                        scheduleCountdownWithResolvedTs();
+                    }
+
+                    // Ensure players see the waiting card (not the question card) while countdown runs
+                    try {
+                        const pv = document.getElementById('playerView');
+                        const waiting = document.getElementById('playerWaitingCard');
+                        const pq = document.getElementById('playerQuestionCard');
+                        if (waiting) waiting.classList.remove('hidden');
+                        if (pq) pq.classList.add('hidden');
+                    } catch (e) { }
+                }
+
+                if (data.phase === "question" && newIdx >= 0) {
+                    if (newIdx !== prevIdx) {
+                        showHostQuestion(data);
+                        resetHostTimer();
+                        if (data.questionStartAt) {
+                            startTimer("hostTimerLabel", data.questionStartAt, true);
+                        }
+                        playSound("timer");
+                    } else if (!hostTimerInterval && data.questionStartAt) {
+                        startTimer("hostTimerLabel", data.questionStartAt, true);
+                    }
+                } else {
+                    resetHostTimer();
+                }
+
+                // hide countdown labels when not in starting phase
+                if (data.phase !== 'starting') {
+                    const hc = document.getElementById('hostCountdownLabel'); if (hc) hc.textContent = '';
+                    const pc = document.getElementById('playerCountdownLabel'); if (pc) pc.textContent = '';
+                }
+
+                if (data.phase === "ended") {
+                    playSound("end");
+                    alert("Game selesai!");
+                }
+
+                updateHostLeaderboard(data.players || {});
+            });
+        }
+
+        function updateHostLeaderboard(playersObj) {
+            const container = document.getElementById("hostLeaderboard");
+            clearElement(container);
+            const players = Object.values(playersObj || {});
+            players.sort((a, b) => (b.score || 0) - (a.score || 0));
+            players.forEach((p, i) => {
+                const row = document.createElement('div');
+                row.className = 'leaderboard-item';
+                const left = document.createElement('div'); left.className = 'left';
+                const avatarHtml = renderAvatarHtml(p.avatar, 40);
+                const nameEl = document.createElement('div'); nameEl.className = 'player-name'; nameEl.textContent = p.name || 'Player';
+                left.innerHTML = `<strong>${i + 1}.</strong>&nbsp;` + avatarHtml;
+                left.appendChild(nameEl);
+
+                const points = document.createElement('div'); points.className = 'player-points'; points.textContent = `${p.score || 0} pts`;
+                row.appendChild(left);
+                row.appendChild(points);
+                container.appendChild(row);
+            });
+        }
+
+        async function startGame() {
+            if (!currentGameId) return;
+            const gameRef = window.fb.ref(`games/${currentGameId}`);
+            // Set a 'starting' phase so clients can show countdown
+            await window.fb.update(gameRef, {
+                phase: "starting",
+                startingAt: window.fb.serverTimestamp()
+            });
+            document.getElementById("hostQuestionCard").classList.remove("hidden");
+            // Play battle music for host only
+            try {
+                // Play SFX for host when starting countdown begins
+                if (role === 'host' && document.getElementById('hostView') && !document.getElementById('hostView').classList.contains('hidden')) {
+                    const audio = new Audio('assets/a-few-moments-later-sponge-bob-sfx-fun.mp3');
+                    audio.volume = 0.9;
+                    audio.play().catch((err) => { console.log('SFX blocked:', err); });
+                }
+            } catch (e) { console.warn('startGame audio error', e); }
+
+            // Host schedules server update to move into first question after countdown
+            setTimeout(async () => {
+                try {
+                    await window.fb.update(gameRef, {
+                        phase: "question",
+                        currentQuestionIndex: 0,
+                        questionStartAt: window.fb.serverTimestamp()
+                    });
+                } catch (e) { console.error('Failed to start question after countdown', e); }
+            }, COUNTDOWN_MS + 200); // small buffer
+        }
+
+        async function tryResumeGame() {
+            const pin = document.getElementById('hostResumePinInput').value.trim();
+            const err = document.getElementById('hostResumeError');
+            err.textContent = '';
+            if (!pin) {
+                err.textContent = 'Masukkan PIN.';
+                return;
+            }
+            try {
+                const ok = await resumeGameByPin(pin);
+                if (!ok) err.textContent = 'Game dengan PIN itu tidak ditemukan atau sudah selesai.';
+            } catch (e) {
+                console.error(e);
+                err.textContent = 'Terjadi kesalahan saat mencoba melanjutkan.';
+            }
+        }
+
+        async function resumeGameByPin(pin) {
+            // search for a game with this PIN
+            const gamesRef = window.fb.ref('games');
+            const gamesSnap = await window.fb.get(gamesRef);
+            const gamesVal = gamesSnap.val ? gamesSnap.val() : gamesSnap || {};
+            let foundId = null;
+            Object.entries(gamesVal).forEach(([k, v]) => {
+                if (v && v.pin === pin && v.phase !== 'ended') {
+                    foundId = k;
+                }
+            });
+            if (!foundId) return false;
+
+            currentGameId = foundId;
+            // attach host views
+            document.getElementById('hostGameInfo').classList.remove('hidden');
+            setText('gamePinDisplay', pin);
+            // reattach listeners
+            listenPlayers(currentGameId);
+            listenGameChanges(currentGameId);
+
+            // persist host state
+            saveLocalState({ role: 'host', currentGameId, pin });
+
+            return true;
+        }
+
+        function showHostQuestion(gameData) {
+            const idx = gameData.currentQuestionIndex;
+            const total = (gameData.questions || []).length;
+            setText("questionIndexLabel", idx + 1);
+            setText("questionTotalLabel", total);
+
+            const q = gameData.questions[idx];
+            if (!q) return;
+
+            setText("hostQuestionText", q.text);
+            // render optional image
+            const hostImgWrap = document.getElementById('hostQuestionImage');
+            if (hostImgWrap) {
+                if (q.image) {
+                    hostImgWrap.style.display = '';
+                    hostImgWrap.innerHTML = `<img src="${q.image}" alt="question image"/>`;
+                } else {
+                    hostImgWrap.style.display = 'none';
+                    hostImgWrap.innerHTML = '';
+                }
+            }
+
+            const container = document.getElementById("hostOptionsContainer");
+            clearElement(container);
+
+            q.options.forEach((opt, i) => {
+                const btn = document.createElement("div");
+                btn.className = "option-btn";
+                btn.textContent = String.fromCharCode(65 + i) + ". " + opt;
+                container.appendChild(btn);
+            });
+        }
+
+        async function nextQuestion() {
+            if (!currentGameId) return;
+            const gameRef = window.fb.ref(`games/${currentGameId}`);
+            const snap = await window.fb.get(gameRef);
+            const data = snap.val ? snap.val() : snap || {};
+            if (!data) return;
+
+            let idx = data.currentQuestionIndex ?? -1;
+            idx++;
+            if (idx >= data.questions.length) {
+                await endGame();
+                return;
+            }
+
+            const playersRef = window.fb.ref(`games/${currentGameId}/players`);
+            const playersSnap = await window.fb.get(playersRef);
+            const players = playersSnap.val ? playersSnap.val() : playersSnap || {};
+            Object.keys(players).forEach((pid) => {
+                const pRef = window.fb.child(playersRef, pid);
+                window.fb.update(pRef, {
+                    currentAnswer: null,
+                    answerTime: null,
+                    lastGain: null
+                });
+            });
+
+            resetHostTimer();
+
+            await window.fb.update(gameRef, {
+                currentQuestionIndex: idx,
+                phase: "question",
+                questionStartAt: window.fb.serverTimestamp()
+            });
+        }
+
+        async function revealAnswer() {
+            if (!currentGameId) return;
+            const gameRef = window.fb.ref(`games/${currentGameId}`);
+            const gameSnap = await window.fb.get(gameRef);
+            const data = gameSnap.val ? gameSnap.val() : gameSnap || {};
+            if (!data) return;
+
+            const idx = data.currentQuestionIndex;
+            const correctIndex = data.questions[idx].correctIndex;
+            const questionStartAt = data.questionStartAt || null;
+
+            const playersRef = window.fb.ref(`games/${currentGameId}/players`);
+            const playersSnap = await window.fb.get(playersRef);
+            const players = playersSnap.val ? playersSnap.val() : playersSnap || {};
+
+            const updates = {};
+            Object.entries(players).forEach(([pid, p]) => {
+                let score = p.score || 0;
+                let gain = 0;
+
+                if (p.currentAnswer === correctIndex && p.answerTime && questionStartAt) {
+                    const deltaMs = p.answerTime - questionStartAt;
+                    gain = MAX_SCORE_PER_QUESTION - deltaMs;
+                    if (gain < 0) gain = 0;
+                    gain = Math.floor(gain);
+                    score += gain;
+                }
+
+                updates[pid + "/score"] = score;
+                updates[pid + "/lastGain"] = gain;
+            });
+
+            await window.fb.update(playersRef, updates);
+            await window.fb.update(gameRef, { phase: "reveal" });
+
+            playSound("reveal");
+            resetHostTimer();
+
+            const container = document.getElementById("hostOptionsContainer");
+            Array.from(container.children).forEach((el, i) => {
+                if (i === correctIndex) {
+                    el.classList.add("correct");
+                }
+            });
+        }
+
+        async function endGame() {
+            if (!currentGameId) return;
+            const gameRef = window.fb.ref(`games/${currentGameId}`);
+            await window.fb.update(gameRef, { phase: "ended" });
+            playSound("end");
+            resetHostTimer();
+            alert("Game diakhiri. Terima kasih!");
+            // clear persisted state
+            clearLocalState();
+        }
+
+        // =============== PLAYER LOGIC ===============
+
+        async function joinGame() {
+            const name = document.getElementById("playerNameInput").value.trim();
+            const pin = document.getElementById("pinInput").value.trim();
+            const errorEl = document.getElementById("playerJoinError");
+            errorEl.textContent = "";
+
+            if (!name || !pin) {
+                errorEl.textContent = "Nama dan PIN wajib diisi.";
+                return;
+            }
+
+            // require avatar selection
+            const chosenAvatar = selectedAvatar || (loadLocalState() && loadLocalState().playerAvatar) || '';
+            if (!chosenAvatar) {
+                errorEl.textContent = 'Silakan pilih atau unggah ikon profil sebelum bergabung.';
+                return;
+            }
+
+            const gamesRef = window.fb.ref("games");
+            const gamesSnap = await window.fb.get(gamesRef);
+            let gameId = null;
+            const gamesVal = gamesSnap.val ? gamesSnap.val() : gamesSnap || {};
+            Object.entries(gamesVal).forEach(([k, val]) => {
+                if (val && val.pin === pin) gameId = k;
+            });
+
+            if (!gameId) {
+                errorEl.textContent = "PIN tidak ditemukan.";
+                return;
+            }
+
+            currentGameId = gameId;
+
+            const playersRef = window.fb.ref(`games/${gameId}/players`);
+            const newPlayerRef = window.fb.push(playersRef);
+            const avatarToSave = selectedAvatar || (loadLocalState() && loadLocalState().playerAvatar) || '';
+            await window.fb.set(newPlayerRef, {
+                name,
+                avatar: avatarToSave || '',
+                score: 0,
+                currentAnswer: null,
+                answerTime: null,
+                lastGain: null
+            });
+            currentPlayerId = newPlayerRef.key;
+
+            // persist player state so refresh can reattach
+            saveLocalState({ role: 'player', currentGameId: currentGameId, currentPlayerId, playerName: name, pin, playerAvatar: avatarToSave });
+
+            document.getElementById("playerJoinCard").classList.add("hidden");
+            document.getElementById("playerWaitingCard").classList.remove("hidden");
+            setText("playerNameLabel", name);
+            setText("playerGamePinLabel", pin);
+
+            listenGameAsPlayer(gameId);
+        }
+
+        function listenGameAsPlayer(gameId) {
+            const gameRef = window.fb.ref(`games/${gameId}`);
+            window.fb.onValue(gameRef, (snap) => {
+                const data = snap.val ? snap.val() : snap || {};
+                if (!data) return;
+
+                if (data.phase === "lobby") {
+                    // tetap menunggu
+                } else if (data.phase === "starting") {
+                    // show waiting card and start countdown
+                    document.getElementById('playerJoinCard').classList.add('hidden');
+                    document.getElementById('playerSummaryCard').classList.add('hidden');
+                    document.getElementById('playerQuestionCard').classList.add('hidden');
+                    document.getElementById('playerWaitingCard').classList.remove('hidden');
+                    if (data.startingAt) startCountdown('playerCountdownLabel', data.startingAt, COUNTDOWN_MS, null);
+                } else if (data.phase === "question") {
+                    showPlayerQuestion(data);
+                    resetPlayerTimer();
+                    if (data.questionStartAt) {
+                        startTimer("playerTimerLabel", data.questionStartAt, false);
+                    }
+                } else if (data.phase === "reveal") {
+                    showPlayerReveal(data);
+                    resetPlayerTimer();
+                } else if (data.phase === "ended") {
+                    showPlayerSummary(data);
+                    resetPlayerTimer();
+                }
+            });
+
+            const playerRef = window.fb.ref(`games/${gameId}/players/${currentPlayerId}`);
+            window.fb.onValue(playerRef, (snap) => {
+                const data = snap.val ? snap.val() : snap || {};
+                if (!data) return;
+
+                // Update indikator skor di layar peserta
+                if (data.lastGain != null) {
+                    setText("playerGainLabel", `Poin soal ini: +${data.lastGain}`);
+                } else {
+                    setText("playerGainLabel", "");
+                }
+                setText("playerTotalScoreLabel", `Total skor: ${data.score || 0}`);
+            });
+        }
+
+        function showPlayerQuestion(gameData) {
+            document.getElementById("playerWaitingCard").classList.add("hidden");
+            document.getElementById("playerSummaryCard").classList.add("hidden");
+            document.getElementById("playerQuestionCard").classList.remove("hidden");
+
+            const idx = gameData.currentQuestionIndex;
+            const q = gameData.questions[idx];
+
+            setText("playerQuestionText", q.text);
+            // render optional image for player
+            const playerImgWrap = document.getElementById('playerQuestionImage');
+            if (playerImgWrap) {
+                if (q.image) {
+                    playerImgWrap.style.display = '';
+                    playerImgWrap.innerHTML = `<img src="${q.image}" alt="question image"/>`;
+                } else {
+                    playerImgWrap.style.display = 'none';
+                    playerImgWrap.innerHTML = '';
+                }
+            }
+            setText("playerQuestionIndexLabel", idx + 1);
+            setText("playerStatusLabel", "Pilih jawabanmu secepat mungkin!");
+            setText("playerGainLabel", "");
+            // total skor akan di-update dari listener playerRef
+
+            const container = document.getElementById("playerOptionsContainer");
+            clearElement(container);
+
+            q.options.forEach((opt, i) => {
+                const btn = document.createElement("button");
+                btn.className = "option-btn";
+                btn.textContent = String.fromCharCode(65 + i) + ". " + opt;
+                btn.onclick = () => submitAnswer(i, btn, container);
+                container.appendChild(btn);
+            });
+        }
+
+        function submitAnswer(choiceIndex, btn, container) {
+            if (!currentGameId || !currentPlayerId) return;
+
+            const label = document.getElementById("playerTimerLabel");
+            const text = label.textContent.replace("s", "");
+            const remaining = parseFloat(text);
+            if (!isNaN(remaining) && remaining <= 0) {
+                setText("playerStatusLabel", "Waktu habis, tunggu soal berikutnya.");
+                return;
+            }
+
+            // determine container reliably (fallback to btn.parentElement)
+            const containerEl = container || (btn && btn.parentElement) || document.getElementById('playerOptionsContainer');
+            // mark selection visibly and disable other buttons; also set aria/data attributes as a robustness fallback
+            Array.from(containerEl.children).forEach((b) => {
+                if (b === btn) {
+                    b.classList.add("selected");
+                    b.setAttribute('aria-pressed', 'true');
+                    b.dataset.selected = '1';
+                    // inline fallback style to ensure highlight even if stylesheet not applied
+                    b.style.background = 'linear-gradient(180deg, rgba(250,204,21,0.06), #1f2937)';
+                    b.style.boxShadow = '0 6px 18px rgba(250,204,21,0.06), inset 0 0 0 3px rgba(250,204,21,0.03)';
+                } else {
+                    b.classList.remove("selected");
+                    b.removeAttribute('aria-pressed');
+                    delete b.dataset.selected;
+                    b.style.background = '';
+                    b.style.boxShadow = '';
+                }
+                b.disabled = true;
+            });
+            // force style reflow so highlight appears immediately
+            void btn.offsetWidth;
+            setText("playerStatusLabel", "Jawaban terkirim, tunggu host reveal.");
+
+            const playerRef = window.fb.ref(`games/${currentGameId}/players/${currentPlayerId}`);
+            window.fb.update(playerRef, {
+                currentAnswer: choiceIndex,
+                answerTime: window.fb.serverTimestamp()
+            });
+        }
+
+        function showPlayerReveal(gameData) {
+            const idx = gameData.currentQuestionIndex;
+            const q = gameData.questions[idx];
+            const correctIndex = q.correctIndex;
+
+            const container = document.getElementById("playerOptionsContainer");
+            Array.from(container.children).forEach((btn, i) => {
+                btn.disabled = true;
+                if (i === correctIndex) {
+                    btn.classList.add("correct");
+                }
+            });
+
+            setText("playerStatusLabel", "Jawaban benar telah ditampilkan. Lihat poinmu lalu tunggu soal berikutnya.");
+        }
+
+        function showPlayerSummary(gameData) {
+            document.getElementById("playerQuestionCard").classList.add("hidden");
+            document.getElementById("playerWaitingCard").classList.add("hidden");
+            document.getElementById("playerSummaryCard").classList.remove("hidden");
+
+            const playerRef = window.fb.ref(`games/${currentGameId}/players/${currentPlayerId}`);
+            window.fb.get(playerRef).then((snap) => {
+                const data = snap.val ? snap.val() : snap || {};
+                setText("playerFinalScore", data ? (data.score || 0) : 0);
+            });
+        }
+
+        function joinAnotherGame() {
+            // keep the player's name if available
+            const stored = loadLocalState() || {};
+            const nameFromLabel = document.getElementById('playerNameLabel') ? document.getElementById('playerNameLabel').textContent : '';
+            const name = stored.playerName || document.getElementById('playerNameInput').value || nameFromLabel || '';
+
+            // clear current game/player identifiers
+            currentGameId = null;
+            currentPlayerId = null;
+
+            // persist minimal state (role + name) so refresh keeps name prefilled
+            saveLocalState({ role: 'player', playerName: name });
+
+            // show join form
+            document.getElementById('playerSummaryCard').classList.add('hidden');
+            document.getElementById('playerWaitingCard').classList.add('hidden');
+            document.getElementById('playerQuestionCard').classList.add('hidden');
+            document.getElementById('playerJoinCard').classList.remove('hidden');
+            document.getElementById('pinInput').value = '';
+            document.getElementById('playerNameInput').value = name;
+            setText('playerJoinError', '');
+        }
+
+        // show confirmation before leaving current game
+        function confirmAndJoinAnotherGame() {
+            const ok = confirm('Are you sure you want to leave this game and join another?');
+            if (ok) joinAnotherGame();
+        }
+    </script>
+</body>
+
+</html>

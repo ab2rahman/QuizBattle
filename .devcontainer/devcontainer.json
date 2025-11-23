@@ -1,0 +1,13 @@
+{
+  "name": "QuizBattle Codespace",
+  "image": "mcr.microsoft.com/devcontainers/base:0-bullseye",
+  "updateContentCommand": "npm ci --prefer-offline --no-audit --no-fund",
+  "postCreateCommand": "npm ci --prefer-offline --no-audit --no-fund && npm run gen-config || true",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint"
+      ]
+    }
+  }
+}

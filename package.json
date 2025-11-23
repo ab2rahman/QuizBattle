@@ -1,0 +1,8 @@
+{
+  "name": "quizbattle-local-tools",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "gen-config": "node scripts/generate-firebase-config.js"
+  }
+}

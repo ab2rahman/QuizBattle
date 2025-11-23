@@ -1,0 +1,2 @@
+# ignore generated firebase config which is created from secrets during local/dev setup
+firebase-config.json
